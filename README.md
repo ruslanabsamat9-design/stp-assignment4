@@ -38,16 +38,6 @@ Coverage report: `target/site/jacoco/index.html`.
 
 Both failures are *real* domain rules (no fake "failure flag" in the facade): any input that breaks the baggage rule or asks for a meal the airline does not serve triggers them, so the examiner can also trigger them with his own values (e.g. baggage `40`, meal `Sushi`). A seat that is already taken or does not exist fails at step A before anything is committed (nothing to undo).
 
-## Design
-
-![class diagram](docs/class-diagram.png)
-
-Source: [`docs/class-diagram.puml`](docs/class-diagram.puml), vector version: [`docs/class-diagram.svg`](docs/class-diagram.svg).
-
-* **Per subsystem (4 classes + a status enum, plus own exception types):** an entity that owns its status transitions (`Reservation`, `ETicket`, `LoyaltyProfile`, each with 3 statuses), a pure business-logic class (`SeatMap`, `BaggageRulesEngine`, `MealPreferenceCatalog`), its own persistence gateway (`ReservationRepository`, `TicketRepository`, `LoyaltyRepository`), a service as the subsystem's entry point, and its own exception types. Each service can be used standalone (see `SubsystemATest`, `SubsystemBTest`, `SubsystemCTest`).
-* **`FlightReservationFacade`** (client workflow): `book(...)` sequences A → B → C, writes the chain status after each step, and decides what to undo depending on where it failed. `recoverInterruptedWorkflows()` repairs chains found half-done.
-* **`ReservationAdminFacade`** (narrow, operators): inspect, find stuck chains, compensate manually, reset the store.
-* **`WorkflowCompensator`**: the single place that knows how to undo a chain, shared by both facades.
 
 ### Durable chain state and recovery
 
