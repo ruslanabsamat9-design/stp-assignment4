@@ -1,0 +1,178 @@
+@startuml class-diagram
+title Flight Reservation - Facade over three independent subsystems
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam linetype ortho
+left to right direction
+
+class "Client\n(App / tests)" as Client
+
+package "facade" {
+  class FlightReservationFacade {
+    +book(BookingRequest): BookingReceipt
+    +recoverInterruptedWorkflows(): List<WorkflowProgress>
+    +latestWorkflow(): Optional<WorkflowProgress>
+    +findWorkflow(id): Optional<WorkflowProgress>
+  }
+  class ReservationAdminFacade {
+    +inspectWorkflows() / inspectReservations()
+    +inspectTickets() / inspectProfiles()
+    +findStuckWorkflows()
+    +compensateWorkflow(id)
+    +compensateAllStuck()
+    +resetStore()
+  }
+  class WorkflowCompensator <<package-private>> {
+    ~compensate(WorkflowProgress): WorkflowProgress
+  }
+  interface ChainObserver {
+    +afterCheckpoint(WorkflowProgress)
+  }
+  class BookingRequest <<record>>
+  class BookingReceipt <<record>>
+  class BookingFailedException
+  class InvalidBookingRequestException
+  class SimulatedCrash <<Error>>
+}
+
+package "workflow (chain log)" {
+  class WorkflowGateway {
+    +save() / loadAll() / loadLatest()
+    +findById() / findUnfinished()
+    +deleteAll()
+  }
+  class WorkflowProgress {
+    workflowId, reservationId, ticketId
+    status, failureReason, history
+  }
+  enum WorkflowStatus {
+    PENDING_B
+    PENDING_C
+    COMPLETED
+    COMPENSATING
+    COMPENSATED
+  }
+}
+
+package "reservation  (Subsystem A)" {
+  class SeatReservationService {
+    +reserveSeat() / cancelReservation()
+    +isSeatAvailable() / findById()
+  }
+  class SeatMap <<business logic>> {
+    +validFlight() / validSeat()
+  }
+  class ReservationRepository <<gateway>>
+  class Reservation {
+    +confirm() / cancel()
+  }
+  enum ReservationStatus {
+    PENDING
+    CONFIRMED
+    CANCELLED
+  }
+  class SeatUnavailableException
+  class InvalidSeatSelectionException
+}
+
+package "ticket  (Subsystem B)" {
+  class TicketService {
+    +issueTicket() / cancelTicket()
+    +findByReservationId()
+  }
+  class BaggageRulesEngine <<business logic>> {
+    +check(baggageKg)
+  }
+  class TicketRepository <<gateway>>
+  class ETicket {
+    +issue() / cancel()
+  }
+  enum ETicketStatus {
+    PENDING
+    ISSUED
+    CANCELLED
+  }
+  class BaggageLimitExceededException
+}
+
+package "loyalty  (Subsystem C)" {
+  class LoyaltyService {
+    +savePreference() / suspend() / reinstate()
+  }
+  class MealPreferenceCatalog <<business logic>> {
+    +require(meal)
+  }
+  class LoyaltyRepository <<gateway>>
+  class LoyaltyProfile {
+    +updatePreference() / suspend() / reinstate()
+  }
+  enum LoyaltyStatus {
+    ACTIVE
+    UPDATED
+    SUSPENDED
+  }
+  class MealUnavailableException
+}
+
+package "storage (shared utility)" {
+  class JsonFileStore<T> {
+    +loadAll() / saveAll() / clear()
+  }
+}
+
+Client --> FlightReservationFacade : uses
+Client --> ReservationAdminFacade : uses
+FlightReservationFacade ..> BookingRequest
+FlightReservationFacade ..> BookingReceipt
+FlightReservationFacade ..> BookingFailedException : throws
+FlightReservationFacade ..> InvalidBookingRequestException : throws
+FlightReservationFacade o-- ChainObserver
+SimulatedCrash ..> ChainObserver : thrown by demo/test observers
+
+FlightReservationFacade *-- SeatReservationService
+FlightReservationFacade *-- TicketService
+FlightReservationFacade *-- LoyaltyService
+FlightReservationFacade *-- WorkflowGateway
+FlightReservationFacade *-- WorkflowCompensator
+ReservationAdminFacade *-- SeatReservationService
+ReservationAdminFacade *-- TicketService
+ReservationAdminFacade *-- LoyaltyService
+ReservationAdminFacade *-- WorkflowGateway
+ReservationAdminFacade *-- WorkflowCompensator
+WorkflowCompensator --> SeatReservationService
+WorkflowCompensator --> TicketService
+WorkflowCompensator --> WorkflowGateway
+
+WorkflowGateway --> JsonFileStore
+WorkflowGateway ..> WorkflowProgress
+WorkflowProgress --> WorkflowStatus
+
+SeatReservationService --> SeatMap
+SeatReservationService --> ReservationRepository
+ReservationRepository --> JsonFileStore
+ReservationRepository ..> Reservation
+Reservation --> ReservationStatus
+SeatReservationService ..> SeatUnavailableException
+SeatMap ..> InvalidSeatSelectionException
+
+TicketService --> BaggageRulesEngine
+TicketService --> TicketRepository
+TicketRepository --> JsonFileStore
+TicketRepository ..> ETicket
+ETicket --> ETicketStatus
+BaggageRulesEngine ..> BaggageLimitExceededException
+
+LoyaltyService --> MealPreferenceCatalog
+LoyaltyService --> LoyaltyRepository
+LoyaltyRepository --> JsonFileStore
+LoyaltyRepository ..> LoyaltyProfile
+LoyaltyProfile --> LoyaltyStatus
+MealPreferenceCatalog ..> MealUnavailableException
+
+note as N1
+  A, B and C never import each other.
+  They only meet inside the facades.
+  (ETicket stores the reservation id as a plain String.)
+end note
+@enduml

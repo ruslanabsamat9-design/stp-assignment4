@@ -1,0 +1,13 @@
+# build output
+target/
+bin/
+out/
+*.class
+*.tmp
+
+# demo state (re-created on first run)
+demo-data/
+
+# IDE
+.vscode/
+.idea/
